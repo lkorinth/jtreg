@@ -20,7 +20,7 @@
             <exclude>com/**</exclude>
           </excludes>
           <compilerArgs>
-            <arg>++patch-module=java.base=src/share/classes</arg>
+            <arg>--patch-module=java.base=src/share/classes</arg>
           </compilerArgs>
         </configuration>
       </plugin>

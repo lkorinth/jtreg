@@ -206,7 +206,7 @@ public class RegressionTestFinder extends TagTestFinder
             String comment = cs.readComment();
             int commentLine = r.lineNumber;
             while (comment != null) {
-                Map<String,String> tagValues = (Map<String,String>) parseComment(comment, file);
+                Map<String,String> tagValues = parseComment(comment, file);
 
                 // Look ahead to see if there are more comments
                 String nextComment = cs.readComment();

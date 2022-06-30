@@ -352,7 +352,7 @@ public class MainAction extends Action
                         break;
                     case OTHERVM:
                         showMode(ExecMode.OTHERVM, othervmOverrideReasons);
-                        status = runOtherJVM();
+                        status = runOtherJVM(); // lkorinth
                         break;
                     default:
                         throw new AssertionError();
@@ -525,7 +525,7 @@ public class MainAction extends Action
                 .setTimeout(timeout, TimeUnit.SECONDS)
                 .setTimeoutHandler(timeoutHandler);
 
-            status = normalize(cmd.exec());
+            status = normalize(cmd.exec()); // lkorinth
 
         } finally {
             sysOut.close();

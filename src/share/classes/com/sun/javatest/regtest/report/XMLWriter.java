@@ -148,7 +148,6 @@ public class XMLWriter {
         xps.indent();
         xps.println("<properties>");
         TestDescription td = tr.getDescription();
-        @SuppressWarnings("unchecked")
         Iterator<String> iterator = td.getParameterKeys();
         while (iterator.hasNext()) {
             String key = iterator.next();
@@ -161,7 +160,6 @@ public class XMLWriter {
             xps.println("\" />");
         }
 
-        @SuppressWarnings("unchecked")
         Enumeration<String> e = tr.getPropertyNames();
         while (e.hasMoreElements()) {
             String x = e.nextElement();

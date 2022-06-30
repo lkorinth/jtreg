@@ -2048,7 +2048,6 @@ public class Tool {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private Iterator<TestResult> getResultsIterator(InterviewParameters params) {
         TestResultTable trt = params.getWorkDirectory().getTestResultTable();
         trt.waitUntilReady();

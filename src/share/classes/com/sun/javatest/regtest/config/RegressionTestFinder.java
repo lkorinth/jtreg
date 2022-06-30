@@ -183,7 +183,6 @@ public class RegressionTestFinder extends TagTestFinder
         if (dot == -1)
             return;
         String extn = name.substring(dot);
-        @SuppressWarnings("unchecked")
         Class<? extends CommentStream> csc = (Class<? extends CommentStream>) getClassForExtension(extn);
         if (csc == null) {
             error(super_i18n, "tag.noParser", file, extn);
@@ -207,7 +206,6 @@ public class RegressionTestFinder extends TagTestFinder
             String comment = cs.readComment();
             int commentLine = r.lineNumber;
             while (comment != null) {
-                @SuppressWarnings({"unchecked", "cast"}) // temporary, to cover transition generifying TestFinder
                 Map<String,String> tagValues = (Map<String,String>) parseComment(comment, file);
 
                 // Look ahead to see if there are more comments
@@ -418,7 +416,6 @@ public class RegressionTestFinder extends TagTestFinder
         String comment;
         int index = 1;
         while ((comment = cs.readComment()) != null) {
-            @SuppressWarnings("unchecked")
             Map<String, String> tv = parseComment(comment, file);
             if (tv.isEmpty())
                 continue;

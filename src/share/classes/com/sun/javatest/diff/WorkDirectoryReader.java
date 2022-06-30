@@ -81,7 +81,6 @@ public class WorkDirectoryReader implements DiffReader {
         return wd.getRoot();
     }
 
-    @SuppressWarnings("unchecked")
     public Iterator<TestResult> iterator() {
         TestResultTable trt = wd.getTestResultTable();
         trt.waitUntilReady();

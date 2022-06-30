@@ -155,7 +155,6 @@ public class GroupManager {
                 error(g, i18n.getString("gm.invalid.name.for.group"));
             }
             for (Entry e: g.entries) {
-                @SuppressWarnings("unchecked")
                 List<Set<Path>> allFiles = Arrays.asList(e.includeFiles, e.excludeFiles);
                 for (Set<Path> files: allFiles) {
                     for (Path f: files) {

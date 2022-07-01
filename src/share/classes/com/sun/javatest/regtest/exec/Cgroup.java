@@ -24,6 +24,8 @@
 
 package com.sun.javatest.regtest.exec;
 
+import static java.nio.file.Path.of;
+
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,19 +33,31 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 public class Cgroup {
-    private static Stream<String> lines(String stringPath) {
+    private static Stream<String> lines(Path path) {
         try {
-            return Files.lines(Path.of(stringPath), Charset.forName("UTF-8"));
+            return Files.lines(path, Charset.forName("UTF-8"));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
+    private static void write(Path path, String value) {
+        try {
+            Files.writeString(path, value, Charset.forName("UTF-8"));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+    //9:memory:/user.slice/user-1001.slice/session-3.scope -> /sys/fs/cgroup/ memory /user.slice/user-1001.slice/session-3.scope 
+    //0::/user.slice/user-1000.slice/session-3.scope -> /sys/fs/cgroup/ /user.slice/user-1000.slice/session-3.scope
+    static String groupLocation(String cgroupLine) {
+        return "/sys/fs/cgroup/" + cgroupLine.split(":")[1] + cgroupLine.split(":")[2];
+    }
 
     static Optional<String> getCgroupByPid(long pid) {
-        return lines("/proc/" + pid + "/cgroup")
-            .filter(str -> str.charAt(0) == '0') // v2
+        return lines(of("/proc/" + pid + "/cgroup"))
+            .filter(str -> str.charAt(0) == '0' || str.matches("[0-9]+:memory:.*")) // "v1 memory" or "v2"
             .findAny()
-            .map(str -> str.split(":")[2]); 
+            .map(Cgroup::groupLocation); 
     }
     
     public static Optional<String> getMyCgroup() {
@@ -51,6 +65,15 @@ public class Cgroup {
     }
 
     public static void main(String[] args) {
-        System.out.println("lkorinth: " + getMyCgroup());
+        getMyCgroup().ifPresent(group -> {
+            Path jtreg = of(group + "/jtreg");
+            try {
+                System.out.println("lkorinth creating directory: " + jtreg);
+                Files.createDirectories(jtreg);
+                Files.createTempDirectory(jtreg, "jtreg");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 }

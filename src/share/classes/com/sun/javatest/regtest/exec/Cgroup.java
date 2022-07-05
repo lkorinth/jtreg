@@ -55,7 +55,7 @@ public class Cgroup {
 
     static Optional<String> getCgroupByPid(long pid) {
         return lines(of("/proc/" + pid + "/cgroup"))
-            .filter(str -> str.charAt(0) == '0' || str.matches("[0-9]+:memory:.*")) // "v1 memory" or "v2"
+            .filter(str -> str.charAt(0) == '0') // "v2"
             .findAny()
             .map(Cgroup::groupLocation); 
     }
@@ -64,13 +64,37 @@ public class Cgroup {
         return getCgroupByPid(ProcessHandle.current().pid());
     }
 
+    public static long getUserId() {
+        return 1001;
+    }
+
+    public static Optional<String> getUserRootGroup() {
+        long id = getUserId();
+        String group =  "/sys/fs/cgroup/user.slice/user-" + id + ".slice/user@" + id + ".service";
+        return Files.exists(of(group))
+            ? Optional.of(group)
+            : Optional.empty();
+    }
+    // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
+    // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
     public static void main(String[] args) {
-        getMyCgroup().ifPresent(group -> {
+        getMyCgroup().ifPresent(group -> System.out.println("lkorinth inherited cgroup: " + group));
+        getUserRootGroup().ifPresent(group -> {
             Path jtreg = of(group + "/jtreg");
             try {
                 System.out.println("lkorinth creating directory: " + jtreg);
                 Files.createDirectories(jtreg);
-                Files.createTempDirectory(jtreg, "jtreg");
+                write(jtreg.resolve("cgroup.subtree_control"), "+memory");
+                write(jtreg.resolve("cgroup.subtree_control"), "+pids");
+                //write(jtreg.resolve("cgroup.subtree_control"), "+cpu");
+                Path tempGroup = Files.createTempDirectory(jtreg, "jtreg");
+                write(tempGroup.resolve("memory.max"), "1G");
+                write(tempGroup.resolve("memory.swap.max"), "0");
+                write(tempGroup.resolve("cgroup.procs"), "0");
+                ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "500M", "--timeout", "10");
+                Process process = builder.start();
+                System.out.println("lkorinth exit value: " + process.waitFor());
+                
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

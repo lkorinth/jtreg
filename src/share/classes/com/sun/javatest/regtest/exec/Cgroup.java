@@ -75,29 +75,52 @@ public class Cgroup {
             ? Optional.of(group)
             : Optional.empty();
     }
-    // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
-    // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
-    public static void main(String[] args) {
-        getMyCgroup().ifPresent(group -> System.out.println("lkorinth inherited cgroup: " + group));
+
+    public static void limit(long bytes) {
+        //getMyCgroup().ifPresent(group -> System.out.println("lkorinth inherited cgroup: " + group));
         getUserRootGroup().ifPresent(group -> {
             Path jtreg = of(group + "/jtreg");
             try {
-                System.out.println("lkorinth creating directory: " + jtreg);
+                //System.out.println("lkorinth creating directory: " + jtreg);
                 Files.createDirectories(jtreg);
                 write(jtreg.resolve("cgroup.subtree_control"), "+memory");
                 write(jtreg.resolve("cgroup.subtree_control"), "+pids");
-                //write(jtreg.resolve("cgroup.subtree_control"), "+cpu");
                 Path tempGroup = Files.createTempDirectory(jtreg, "jtreg");
-                write(tempGroup.resolve("memory.max"), "1G");
+                System.out.println("lkorinth creating directory: " + tempGroup.toString() + " with limit: " + bytes);
+                write(tempGroup.resolve("memory.max"), "" + bytes);
                 write(tempGroup.resolve("memory.swap.max"), "0");
-                write(tempGroup.resolve("cgroup.procs"), "0");
-                ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "500M", "--timeout", "10");
-                Process process = builder.start();
-                System.out.println("lkorinth exit value: " + process.waitFor());
-                
+                write(tempGroup.resolve("cgroup.procs"), "0");       
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
+    }
+        
+    
+    // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
+    // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
+    public static void main(String[] args) {
+        try {
+            ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "1G", "--timeout", "1");
+
+            long low = 0;
+            long high = 10000000000l;
+            for (int i = 0; i < 16; i++) {
+                long mid = (low + high) / 2;
+                limit(mid);
+                System.out.println("lkorinth [" + low + ", " + high + "]: ");
+                Process process = builder.start();
+                int exitValue =  process.waitFor();
+                System.out.println("lkorinth exit value: " + exitValue);
+                if (exitValue == 0) {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+                
+            }        
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

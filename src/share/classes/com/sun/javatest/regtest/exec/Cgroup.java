@@ -25,11 +25,15 @@
 package com.sun.javatest.regtest.exec;
 
 import static java.nio.file.Path.of;
+import static java.math.BigDecimal.valueOf;
 
+import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class Cgroup {
@@ -95,32 +99,50 @@ public class Cgroup {
             }
         });
     }
-        
+
+    /*
+    record Interval(BigDecimal low, BigDecimal high) {
+        BigDecimal midPoint() {
+            return low.add(high).divide(valueOf(2));
+        }
+    };
+    */
+
+    static class Interval {
+        BigDecimal low, high;
+        Interval(BigDecimal low, BigDecimal high) {
+            this.low = low;
+            this.high = high;
+        }
+        BigDecimal midPoint() {
+            return low.add(high).divide(valueOf(2));
+        }
+    };
+    
+    public static Stream<Interval> bisect(Interval interval, Predicate<BigDecimal> predicate) {
+        return Stream.iterate(interval, i -> predicate.test(i.midPoint())
+                              ? new Interval(i.low, i.midPoint())
+                              : new Interval(i.midPoint(), i.high));
+    }
+
+    public static boolean canRunProgramWithLimit(ProcessBuilder builder, long memLimit) {
+        try {
+            limit(memLimit);
+            return builder.start().waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }            
+    
+    public static long bisect(ProcessBuilder builder) {
+        return bisect(new Interval(valueOf(0), valueOf(10000000000l)), memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
+            .skip(10).findFirst().get().midPoint().longValue();
+    }
     
     // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
     // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
     public static void main(String[] args) {
-        try {
-            ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "1G", "--timeout", "1");
-
-            long low = 0;
-            long high = 10000000000l;
-            for (int i = 0; i < 16; i++) {
-                long mid = (low + high) / 2;
-                limit(mid);
-                System.out.println("lkorinth [" + low + ", " + high + "]: ");
-                Process process = builder.start();
-                int exitValue =  process.waitFor();
-                System.out.println("lkorinth exit value: " + exitValue);
-                if (exitValue == 0) {
-                    high = mid;
-                } else {
-                    low = mid;
-                }
-                
-            }        
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "1G", "--timeout", "1");
+        System.out.println("lkorinth bisect size: " + bisect(builder));
     }
 }

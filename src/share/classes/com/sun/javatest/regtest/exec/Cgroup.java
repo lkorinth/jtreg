@@ -24,15 +24,16 @@
 
 package com.sun.javatest.regtest.exec;
 
-import static java.nio.file.Path.of;
 import static java.math.BigDecimal.valueOf;
+import static java.nio.file.Path.of;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -44,6 +45,7 @@ public class Cgroup {
             throw new RuntimeException(e);
         }
     }
+
     private static void write(Path path, String value) {
         try {
             Files.writeString(path, value, Charset.forName("UTF-8"));
@@ -51,6 +53,7 @@ public class Cgroup {
             throw new RuntimeException(e);
         }
     }
+
     //9:memory:/user.slice/user-1001.slice/session-3.scope -> /sys/fs/cgroup/ memory /user.slice/user-1001.slice/session-3.scope 
     //0::/user.slice/user-1000.slice/session-3.scope -> /sys/fs/cgroup/ /user.slice/user-1000.slice/session-3.scope
     static String groupLocation(String cgroupLine) {
@@ -61,20 +64,32 @@ public class Cgroup {
         return lines(of("/proc/" + pid + "/cgroup"))
             .filter(str -> str.charAt(0) == '0') // "v2"
             .findAny()
-            .map(Cgroup::groupLocation); 
+            .map(Cgroup::groupLocation);
     }
-    
+
     public static Optional<String> getMyCgroup() {
         return getCgroupByPid(ProcessHandle.current().pid());
     }
 
+    public static Stream<String> run(String... args) {
+        try {
+            Process p = new ProcessBuilder(args).start();
+            p.waitFor();
+            return new BufferedReader(new InputStreamReader(p.getInputStream())).lines();
+        } catch (Exception e) {
+            throw new RuntimeException("failed to run: ", e);
+        }
+    }
+
+    static long cachedUserId = Long.parseLong(run("id", "-u").findFirst().get());  
+                           
     public static long getUserId() {
-        return 1001;
+        return cachedUserId;
     }
 
     public static Optional<String> getUserRootGroup() {
         long id = getUserId();
-        String group =  "/sys/fs/cgroup/user.slice/user-" + id + ".slice/user@" + id + ".service";
+        String group = "/sys/fs/cgroup/user.slice/user-" + id + ".slice/user@" + id + ".service";
         return Files.exists(of(group))
             ? Optional.of(group)
             : Optional.empty();
@@ -85,7 +100,6 @@ public class Cgroup {
         getUserRootGroup().ifPresent(group -> {
             Path jtreg = of(group + "/jtreg");
             try {
-                //System.out.println("lkorinth creating directory: " + jtreg);
                 Files.createDirectories(jtreg);
                 write(jtreg.resolve("cgroup.subtree_control"), "+memory");
                 write(jtreg.resolve("cgroup.subtree_control"), "+pids");
@@ -95,7 +109,7 @@ public class Cgroup {
                 write(tempGroup.resolve("memory.swap.max"), "0");
                 write(tempGroup.resolve("cgroup.procs"), "0");       
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Failed to create cgroup", e);
             }
         });
     }
@@ -108,16 +122,18 @@ public class Cgroup {
     };
     */
 
+
     static class Interval {
         BigDecimal low, high;
         Interval(BigDecimal low, BigDecimal high) {
             this.low = low;
             this.high = high;
         }
+
         BigDecimal midPoint() {
             return low.add(high).divide(valueOf(2));
         }
-    };
+    }
     
     public static Stream<Interval> bisect(Interval interval, Predicate<BigDecimal> predicate) {
         return Stream.iterate(interval, i -> predicate.test(i.midPoint())

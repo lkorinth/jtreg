@@ -1687,7 +1687,7 @@ public class Tool {
                         c = Runtime.getRuntime().availableProcessors();
                     else
                         c = Integer.parseInt(concurrencyArg);
-                    rp.setConcurrency(c);
+                    rp.setConcurrency(c); // lkorinth
                 } catch (NumberFormatException e) {
                     throw new BadArgs(i18n, "main.badConcurrency");
                 }

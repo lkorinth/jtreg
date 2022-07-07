@@ -54,10 +54,9 @@ public class Cgroup {
         }
     }
 
-    //9:memory:/user.slice/user-1001.slice/session-3.scope -> /sys/fs/cgroup/ memory /user.slice/user-1001.slice/session-3.scope 
-    //0::/user.slice/user-1000.slice/session-3.scope -> /sys/fs/cgroup/ /user.slice/user-1000.slice/session-3.scope
+    //0::/user.slice/user-1000.slice/session-3.scope -> /sys/fs/cgroup/user.slice/user-1000.slice/session-3.scope
     static String groupLocation(String cgroupLine) {
-        return "/sys/fs/cgroup/" + cgroupLine.split(":")[1] + cgroupLine.split(":")[2];
+        return "/sys/fs/cgroup" + cgroupLine.split(":")[2];
     }
 
     static Optional<String> getCgroupByPid(long pid) {
@@ -81,8 +80,8 @@ public class Cgroup {
         }
     }
 
-    static long cachedUserId = Long.parseLong(run("id", "-u").findFirst().get());  
-                           
+    static long cachedUserId = Long.parseLong(run("id", "-u").findFirst().get());
+
     public static long getUserId() {
         return cachedUserId;
     }
@@ -107,7 +106,7 @@ public class Cgroup {
                 System.out.println("lkorinth creating directory: " + tempGroup.toString() + " with limit: " + bytes);
                 write(tempGroup.resolve("memory.max"), "" + bytes);
                 write(tempGroup.resolve("memory.swap.max"), "0");
-                write(tempGroup.resolve("cgroup.procs"), "0");       
+                write(tempGroup.resolve("cgroup.procs"), "0");
             } catch (Exception e) {
                 throw new RuntimeException("Failed to create cgroup", e);
             }
@@ -122,7 +121,6 @@ public class Cgroup {
     };
     */
 
-
     static class Interval {
         BigDecimal low, high;
         Interval(BigDecimal low, BigDecimal high) {
@@ -134,7 +132,7 @@ public class Cgroup {
             return low.add(high).divide(valueOf(2));
         }
     }
-    
+
     public static Stream<Interval> bisect(Interval interval, Predicate<BigDecimal> predicate) {
         return Stream.iterate(interval, i -> predicate.test(i.midPoint())
                               ? new Interval(i.low, i.midPoint())
@@ -148,17 +146,17 @@ public class Cgroup {
         } catch (Exception e) {
             return false;
         }
-    }            
-    
-    public static long bisect(ProcessBuilder builder) {
-        return bisect(new Interval(valueOf(0), valueOf(10000000000l)), memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
-            .skip(10).findFirst().get().midPoint().longValue();
     }
-    
+
+    public static long bisect(ProcessBuilder builder, Interval interval) {
+        return bisect(interval, memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
+                .skip(10).findFirst().get().midPoint().longValue();
+    }
+
     // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
     // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
     public static void main(String[] args) {
         ProcessBuilder builder = new ProcessBuilder("stress", "--vm", "1", "--vm-bytes", "1G", "--timeout", "1");
-        System.out.println("lkorinth bisect size: " + bisect(builder));
+        System.out.println("lkorinth bisect size: " + bisect(builder, new Interval(valueOf(0), valueOf(10_000_000_000L))));
     }
 }

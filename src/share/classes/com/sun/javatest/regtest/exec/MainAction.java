@@ -25,12 +25,17 @@
 
 package com.sun.javatest.regtest.exec;
 
+import static java.math.BigDecimal.valueOf;
+
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -379,7 +384,8 @@ public class MainAction extends Action
         return ba.build(buildOpts, buildArgs, SREASON_ASSUMED_BUILD, script);
     }
 
-    private Status runOtherJVM() throws TestRunException {
+ 
+  private Status runOtherJVM() throws TestRunException { // lkorinth
         // Arguments to wrapper:
         String runModuleName;
         String runModuleClassName;
@@ -525,6 +531,25 @@ public class MainAction extends Action
                 .setTimeout(timeout, TimeUnit.SECONDS)
                 .setTimeoutHandler(timeoutHandler);
 
+            //System.out.println("lkorinth");
+            //new Exception().printStackTrace();
+            //System.exit(1);
+            //CgroupV2Subsystem.
+
+            if (System.getenv("BISECT") != null) {
+                ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
+                bCmd.environment().clear();
+                bCmd.environment().putAll(cmd.getEnvironment());
+
+                System.out.println("lkorinth test name: " +  Cgroup.regressionScriptId(script));
+                System.out.println("lkorinth test args: " +  bCmd.command());
+
+                long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
+                System.out.println("lkorinth bisected: " + mem);
+                Cgroup.write(Path.of("/home/lkorinth/bisect"),
+                             Cgroup.regressionScriptId(script) + "=" + mem + "\n",
+                             StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
+            }
             status = normalize(cmd.exec()); // lkorinth
 
         } finally {

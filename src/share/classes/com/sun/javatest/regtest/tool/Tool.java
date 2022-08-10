@@ -1314,7 +1314,7 @@ public class Tool {
                         // Also, the classpath for compile actions is typically
                         // different for compile actions and main actions.
                         int factor = 2; // (testJavaOpts.isEmpty() ? 1 : 2);
-                        maxPoolSize = params.getConcurrency() * factor;
+                        maxPoolSize = params.getConcurrency() * factor; // lkorinth
                     }
                     p.setMaxPoolSize(maxPoolSize);
                     p.setIdleTimeout(poolIdleTimeout);
@@ -1335,7 +1335,7 @@ public class Tool {
             } else {
                 try {
                     boolean quiet = (multiRun && !(verbose != null && verbose.multiRun));
-                    testStats.addAll(batchHarness(params, quiet));
+                    testStats.addAll(batchHarness(params, quiet)); // lkorinth
                 } finally {
                     checkLockFiles(params.getWorkDirectory().getRoot(), "done");
                 }
@@ -1816,7 +1816,7 @@ public class Tool {
     /**
      * Run the harness in batch mode, using the specified parameters.
      */
-    private TestStats batchHarness(RegressionParameters params, boolean quiet)
+  private TestStats batchHarness(RegressionParameters params, boolean quiet) //lkorinth
             throws Fault, Harness.Fault, InterruptedException {
         boolean reportRequired =
                 reportMode != ReportMode.NONE && !Boolean.getBoolean("javatest.noReportRequired");
@@ -1941,7 +1941,7 @@ public class Tool {
                 }
 
                 String[] tests = params.getTests();
-                ok = (tests != null && tests.length == 0) || h.batch(params);
+                ok = (tests != null && tests.length == 0) || h.batch(params); // lkorinth this is it!
 
                 Agent.Pool.flush(params);
                 try {

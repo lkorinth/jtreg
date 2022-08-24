@@ -26,6 +26,7 @@
 package com.sun.javatest.regtest.exec;
 
 import static java.math.BigDecimal.valueOf;
+import static java.util.stream.Collectors.joining;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -537,21 +538,20 @@ public class MainAction extends Action
             //CgroupV2Subsystem.
 
             if (System.getenv("BISECT") != null) {
-                ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
-                bCmd.environment().clear();
-                bCmd.environment().putAll(cmd.getEnvironment());
-
-                System.out.println("lkorinth test name: " +  Cgroup.regressionScriptId(script));
-                System.out.println("lkorinth test args: " +  bCmd.command());
-
-                long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
-                System.out.println("lkorinth bisected: " + mem);
-                Cgroup.write(Path.of("/home/lkorinth/bisect"),
-                             Cgroup.regressionScriptId(script) + "=" + mem + "\n",
-                             StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
+                System.out.println("lkorinth doing id: " + Cgroup.regressionScriptId(script));
+                Cgroup.memUsage.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
+                        ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
+                        bCmd.environment().clear();
+                        bCmd.environment().putAll(cmd.getEnvironment());
+                        long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
+                        System.out.println("lkorinth bisected: " + mem);
+                        Cgroup.write(Path.of("/home/lkorinth/bisect"),
+                                     s + "=" + mem + "\n",
+                                     StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
+                        return Long.valueOf(mem);
+                });
             }
             status = normalize(cmd.exec()); // lkorinth
-
         } finally {
             sysOut.close();
             sysErr.close();

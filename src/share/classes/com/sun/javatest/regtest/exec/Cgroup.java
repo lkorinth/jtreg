@@ -26,6 +26,7 @@ package com.sun.javatest.regtest.exec;
 
 import static java.math.BigDecimal.valueOf;
 import static java.nio.file.Path.of;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 
 import java.io.BufferedReader;
@@ -56,7 +57,8 @@ public class Cgroup {
         try {
             return Files.lines(path, Charset.forName("UTF-8"));
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+            throw new Error(e);
         }
     }
 
@@ -119,7 +121,8 @@ public class Cgroup {
             try {
                 Files.createDirectories(jtreg);
                 write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), "+memory");
-                write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), "+pids");
+                write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), "+cpuacct");
+                //write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), "+pids");
                 Path tempGroup = Files.createTempDirectory(jtreg, "jtreg");
                 //                System.out.println("lkorinth creating directory: " + tempGroup.toString() + " with limit: " + bytes);
                 write(tempGroup.resolve(MEMORY_MAX), "" + bytes);
@@ -165,36 +168,55 @@ public class Cgroup {
 
     static void delete(Path p) {
         try {
+            System.out.println("lkorinth delete path: " + p);
+            long nanos = lines(p.resolve("cpuacct.usage")).map(Long::valueOf).findFirst().orElse(Long.valueOf(0));
+            System.out.println("lkorinth cpuacct.usage: " + nanos);
             Files.delete(p);
         } catch (Exception e) {}
     }
 
     private static ConcurrentHashMap<String, Long>  readTestMetadata(Path p) {
         return new ConcurrentHashMap<>(lines(p).collect(toMap(s -> s.split("=")[0],
-                                                              s -> Long.valueOf(s.split("=")[2]),
+                                                              s -> Long.valueOf(s.split("=")[1]),
                                                               Math::max)));
     }
 
-    public static ConcurrentHashMap<String, Long> memUsage = readTestMetadata(Path.of("/home/lkorinth/bisect"));
+    public static ConcurrentHashMap<String, Long> memUsage;
+
+    static {
+        System.out.println("lkorinth: begin static");
+        try {
+            memUsage = readTestMetadata(Path.of("/home/lkorinth/bisect"));
+        } catch (Exception e) {
+            System.out.println("lkorinth catch:" + e);
+        }
+        System.out.println("lkorinth: end static");
+    }
 
     public static int runRestricted(ProcessBuilder builder, long memLimit) {
-        Path cgroup = createCgroup(memLimit).orElseThrow();
+        Path cgroup = null;
         try {
-            //String originalCgroup = getMyCgroup().orElseThrow();
+            cgroup = createCgroup(memLimit).orElseThrow();
             ArrayList<String> cgexecCmd = new ArrayList<String>();
             //cgexecCmd.addAll(List.of("cgexec", "-g", "*:" + cgroup.toString(), "--sticky"));
-            cgexecCmd.addAll(List.of("cgexec2", cgroup.toString()));
+            cgexecCmd.addAll(List.of("/home/lkorinth/local/bin/cgexec2", cgroup.toString()));
             cgexecCmd.addAll(builder.command());
             ProcessBuilder cgexecPB = new ProcessBuilder(cgexecCmd);
             cgexecPB.environment().clear();
             cgexecPB.environment().putAll(builder.environment());
-            //System.out.println("lkorinth start process: " + cgexecPB.command());
-            return cgexecPB.start().waitFor();
-            //            write(of(originalCgroup).resolve(CGROUP_PROCS), SELF);
-        } catch (Exception e) {
-            throw new  RuntimeException(e);
+            String e = cgexecPB.environment().entrySet().stream().map(pair -> pair.getKey() + "=" + pair.getValue()).collect(joining (" "));
+            String args = cgexecPB.command().stream().map(arg -> "'" + arg.replace("'", "\\'") + "'").collect(joining (" "));
+            System.out.println("lkorinth running with limit " + memLimit+ ": " + e + " " + args);
+            int exitCode = cgexecPB.start().waitFor();
+            //System.out.println("lkorinth exit code: " + exitCode);
+            return exitCode;
+            // write(of(originalCgroup).resolve(CGROUP_PROCS), SELF);
+        } catch (Throwable t) {
+            throw new Error(t);
         } finally {
-            delete(cgroup);
+            if (cgroup != null) {
+                delete(cgroup);
+            }
         }
     }
 
@@ -207,7 +229,6 @@ public class Cgroup {
     public static boolean canRunProgramWithLimit(ProcessBuilder builder, long memLimit) {
         try {
             int exitValue = runRestricted(builder, memLimit);
-            System.out.println("lkorinth exitValue: " + exitValue);
             return exitValue == 95; // success!
         } catch (Exception e) {
             return false;
@@ -215,8 +236,11 @@ public class Cgroup {
     }
 
     public static long bisect(ProcessBuilder builder, Interval interval) {
-        return bisect(interval, memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
-                .skip(8).findFirst().get().midPoint().longValue();
+        //System.out.println("lkorinth: start bisect");
+        long mem = bisect(interval, memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
+            .skip(8).findFirst().get().high.longValue();
+        //        System.out.println("lkorinth: end bisect: " + mem);
+        return mem;
     }
 
     // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
@@ -227,9 +251,10 @@ public class Cgroup {
     }
 
     public static String regressionScriptId(RegressionScript script) {
-        return  script.getTestDescription().getRootRelativePath()
-            + "#" + script.getTestDescription().getName()
-            + "#" + script.getTestDescription().getId();
+        //return "xxx";
+           return  script.getTestDescription().getRootRelativePath()
+               + "#" + script.getTestDescription().getName()
+               + "#" + script.getTestDescription().getId();
     }
     //cgexec
 }

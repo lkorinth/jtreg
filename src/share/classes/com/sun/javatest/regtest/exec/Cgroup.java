@@ -36,7 +36,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -47,14 +46,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import com.sun.javatest.regtest.exec.Cgroup.ProcessData;
-
 public class Cgroup {
     private static final String USAGE_USEC = "usage_usec";
     private static final String PLUS_CPU = "+cpu";
     private static final String CPU_STAT = "cpu.stat";
     private static final String PLUS_MEMORY = "+memory";
-    private static final Path SYS_FS = of("/sys/fs");
+    public static final Path SYS_FS = of("/sys/fs");
     private static final String CGROUP_PROCS = "cgroup.procs";
     private static final String MEMORY_SWAP_MAX = "memory.swap.max";
     private static final String MEMORY_MAX = "memory.max";
@@ -192,8 +189,7 @@ public class Cgroup {
         }
 
         public String toString() {
-            return ""//testId
-                + " " + exitCode
+            return exitCode
                 + " " +  cpuUsageSecond
                 + " " +  cpuWallSeconds
                 + " " +  memUsageInBytes

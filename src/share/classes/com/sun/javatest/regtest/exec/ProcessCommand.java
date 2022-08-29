@@ -300,7 +300,7 @@ public class ProcessCommand
                 outCopier.join();
                 errCopier.join();
                 int exitCode = process.waitFor();
-                cgroup.ifPresent(cg -> Cgroup.collectAndDelete(cg, start, exitCode, memLimit.orElse(0l)));
+                cgroup.ifPresent(cg -> Cgroup.collectAndDelete(Cgroup.SYS_FS.resolve(cg), start, exitCode, memLimit.orElse(0l)));
 
                 // if the timeout hasn't fired, cancel it as quickly as possible
                 alarm.cancel();

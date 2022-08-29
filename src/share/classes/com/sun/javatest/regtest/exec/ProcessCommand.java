@@ -30,9 +30,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -47,6 +50,31 @@ import com.sun.javatest.regtest.util.StreamCopier;
  **/
 public class ProcessCommand
 {
+    // private HashMap<Integer, Status> statusTable;
+    // private Status defaultStatus = Status.error("unknown reason");
+    // private File execDir;
+    // private List<String> cmd;
+    // private Map<String, String> env;
+    // private PrintWriter out;
+    // private PrintWriter err;
+    // private long timeout;
+    // private TimeoutHandler timeoutHandler;
+
+    public ProcessCommand cloneProcessCommand() {
+        ProcessCommand clone = new ProcessCommand();
+
+        statusTable = new HashMap<>(clone.statusTable);
+        clone.setExecDir(getExecDir()); // todo file is imutable?
+        clone.setCommand(new ArrayList<>(getCommand()));
+        clone.setEnvironment(new HashMap<>(getEnvironment()));
+        //clone.out
+        //clone.err
+        clone.setDefaultStatus(defaultStatus);
+        clone.timeout = timeout;
+        clone.setTimeoutHandler(timeoutHandler);
+
+        return clone;
+    }
     /**
      * Set a status to be returned for a specific exit code, overwriting any
      * previous setting for this exit code. If the default status has not yet
@@ -224,7 +252,7 @@ public class ProcessCommand
      * @throws IndexOutOfBoundsException if the command is an empty list (has size 0)
      * @see #getStatus
      */
-     public Status exec() {
+     public Status exec(Optional<Long> memLimit) {
         if (out == null) {
             throw new IllegalArgumentException("Output stream is required");
         }
@@ -233,6 +261,8 @@ public class ProcessCommand
         }
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
+            Optional<Path> cgroup = memLimit.map(l -> Cgroup.modifyRunRestricted(pb, l));
+
             pb.directory(execDir);
             if (env != null) {
                 pb.environment().clear();
@@ -270,6 +300,7 @@ public class ProcessCommand
                 outCopier.join();
                 errCopier.join();
                 int exitCode = process.waitFor();
+                cgroup.ifPresent(cg -> Cgroup.collectAndDelete(cg, start, exitCode, memLimit.orElse(0l)));
 
                 // if the timeout hasn't fired, cancel it as quickly as possible
                 alarm.cancel();

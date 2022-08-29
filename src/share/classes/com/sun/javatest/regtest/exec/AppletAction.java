@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -319,7 +320,7 @@ public class AppletAction extends Action
             // allow only one applet to run at a time, we don't want the tester
             // to be inundated with applet tests
             synchronized(appletLock) {
-                status = normalize(cmd.exec());
+                status = normalize(cmd.exec(Optional.empty()));
             }
         } finally {
             if (sysOut != null) sysOut.close();

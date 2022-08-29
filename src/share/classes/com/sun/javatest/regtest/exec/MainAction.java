@@ -45,6 +45,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -532,26 +533,26 @@ public class MainAction extends Action
                 .setTimeout(timeout, TimeUnit.SECONDS)
                 .setTimeoutHandler(timeoutHandler);
 
-            //System.out.println("lkorinth");
-            //new Exception().printStackTrace();
-            //System.exit(1);
-            //CgroupV2Subsystem.
-
             if (System.getenv("BISECT") != null) {
                 System.out.println("lkorinth doing id: " + Cgroup.regressionScriptId(script));
-                Cgroup.memUsage.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
+                Cgroup.testProcessData.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
                         ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
                         bCmd.environment().clear();
                         bCmd.environment().putAll(cmd.getEnvironment());
+                        System.out.println("lkorinth start bisect: ");
                         long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
-                        System.out.println("lkorinth bisected: " + mem);
-                        Cgroup.write(Path.of("/home/lkorinth/bisect"),
-                                     s + "=" + mem + "\n",
-                                     StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
-                        return Long.valueOf(mem);
+                        System.out.println("lkorinth end bisect: " + mem);
+
+                        Optional<Cgroup.ProcessData> opd = Cgroup.runRestricted(bCmd, mem*2);
+                        opd.ifPresent(pd -> {
+                                Cgroup.write(Path.of("/home/lkorinth/bisect"),
+                                             s + " " + pd.toString(),
+                                             StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
+                            });
+                        return opd.get();
                 });
             }
-            status = normalize(cmd.exec()); // lkorinth
+            status = normalize(cmd.exec(Optional.of(Cgroup.testProcessData.get(Cgroup.regressionScriptId(script)).memUsageInBytes))); // lkorinth
         } finally {
             sysOut.close();
             sysErr.close();

@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -296,7 +297,7 @@ public class ShellAction extends Action
                     .setTimeout(timeout, TimeUnit.SECONDS)
                     .setTimeoutHandler(timeoutHandler);
 
-                status = normalize(cmd.exec());
+                status = normalize(cmd.exec(Optional.empty()));
 
             } finally {
                 if (lock != null) lock.unlock();

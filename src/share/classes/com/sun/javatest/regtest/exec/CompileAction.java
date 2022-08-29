@@ -47,6 +47,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -652,7 +653,7 @@ public class CompileAction extends Action {
             .setTimeout(timeout, TimeUnit.SECONDS)
             .setTimeoutHandler(timeoutHandler);
 
-        status = normalize(cmd.exec());
+        status = normalize(cmd.exec(Optional.empty()));
 
         try (PrintWriter sysOut = section.createOutput("System.out")) {
             sysOut.write(stdOut.getOutput());

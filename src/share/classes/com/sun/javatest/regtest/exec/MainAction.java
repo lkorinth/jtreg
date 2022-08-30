@@ -26,15 +26,12 @@
 package com.sun.javatest.regtest.exec;
 
 import static java.math.BigDecimal.valueOf;
-import static java.util.stream.Collectors.joining;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.nio.file.Files;
-import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -537,6 +534,7 @@ public class MainAction extends Action
                 System.out.println("lkorinth doing id: " + Cgroup.regressionScriptId(script));
                 Cgroup.testProcessData.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
                         ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
+                        bCmd.directory(cmd.getExecDir());
                         bCmd.environment().clear();
                         bCmd.environment().putAll(cmd.getEnvironment());
                         System.out.println("lkorinth start bisect: ");
@@ -544,11 +542,9 @@ public class MainAction extends Action
                         System.out.println("lkorinth end bisect: " + mem);
 
                         Optional<Cgroup.ProcessData> opd = Cgroup.runRestricted(bCmd, mem*2);
-                        opd.ifPresent(pd -> {
-                                Cgroup.write(Path.of("/home/lkorinth/bisect"),
-                                             s + " " + pd.toString(),
-                                             StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
-                            });
+                        opd.ifPresent(pd -> Cgroup.write(Path.of("/home/lkorinth/bisect"),
+                                                         s + " " + pd.toString() + "\n",
+                                                         StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE));
                         return opd.get();
                 });
             }

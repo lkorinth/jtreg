@@ -24,10 +24,11 @@
 
 package com.sun.javatest.regtest.exec;
 
+import static java.lang.System.out;
 import static java.math.BigDecimal.valueOf;
 import static java.nio.file.Path.of;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toConcurrentMap;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -39,10 +40,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -130,7 +130,6 @@ public class Cgroup {
                 //write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), PLUS_CPU);
                 //write(jtreg.resolve(CGROUP_SUBTREE_CONTROL), "+pids");
                 Path tempGroup = Files.createTempDirectory(jtreg, "jtreg");
-                //                System.out.println("lkorinth creating directory: " + tempGroup.toString() + " with limit: " + bytes);
                 write(tempGroup.resolve(MEMORY_MAX), "" + bytes);
                 write(tempGroup.resolve(MEMORY_SWAP_MAX), "0");
                 //write(tempGroup.resolve(CGROUP_PROCS), SELF);
@@ -174,14 +173,12 @@ public class Cgroup {
     }
 
     static class ProcessData {
-        //        public String testId;
         public int exitCode;
         public double cpuUsageSecond;
         public double cpuWallSeconds;
         public long memUsageInBytes;
 
         public ProcessData(int exitCode, double cpuUsageSecond, double cpuWallSeconds, long memUsageInBytes) {
-            //            this.testId = testId;
             this.exitCode = exitCode;
             this.cpuUsageSecond = cpuUsageSecond;
             this.cpuWallSeconds = cpuWallSeconds;
@@ -207,16 +204,16 @@ public class Cgroup {
 
     static Optional<ProcessData> collectAndDelete(Path p, long startNanos, int exitCode, long bytes) {
         try {
-            System.out.println("lkorinth delete path: " + p);
+            out.println("lkorinth delete path: " + p);
             double seconds = lines(p.resolve(CPU_STAT))
                     .map(s -> s.split(" "))
                     .filter(a -> a[0].equals(USAGE_USEC))
                     .map(a -> Long.valueOf(a[1]))
                     .findFirst().orElse(Long.valueOf(0)) / 1_000_000.0;
             double wall = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-            System.out.println("lkorinth usage in seconds: " + seconds);
-            System.out.println("lkorinth wall in seconds: " + wall);
-            System.out.println("lkorinth load: " + seconds / wall);
+            out.println("lkorinth usage in seconds: " + seconds);
+            out.println("lkorinth wall in seconds: " + wall);
+            out.println("lkorinth load: " + seconds / wall);
             Files.delete(p);
             return Optional.of(new ProcessData(exitCode, seconds, wall, bytes));
         } catch (Exception e) {
@@ -224,24 +221,22 @@ public class Cgroup {
         }
     }
 
-    private static ConcurrentHashMap<String, ProcessData> readTestMetadata(Path p) {
-        return new ConcurrentHashMap<>(lines(p)
-                                       .map(ProcessData::fromString)
-                                       .collect(toMap(me -> me.getKey(),
-                                                      me -> me.getValue(),
-                                                      (a, b) -> a.memUsageInBytes > b.memUsageInBytes ? a : b)));
+    private static Map<String, ProcessData> readTestMetadata(Path p) {
+        return lines(p)
+            .map(ProcessData::fromString)
+            .collect(toConcurrentMap(Entry::getKey, Entry::getValue,(a, b) -> a.memUsageInBytes > b.memUsageInBytes ? a : b));
     }
 
-    public static ConcurrentHashMap<String, ProcessData> testProcessData;
+    public static Map<String, ProcessData> testProcessData;
 
     static {
-        System.out.println("lkorinth: begin static");
+        out.println("lkorinth: begin static");
         try {
             testProcessData = readTestMetadata(Path.of("/home/lkorinth/bisect"));
         } catch (Exception e) {
-            System.out.println("lkorinth catch:" + e);
+            out.println("lkorinth catch:" + e);
         }
-        System.out.println("lkorinth: end static");
+        out.println("lkorinth: end static");
     }
 
     public static Path modifyRunRestricted(ProcessBuilder builder, long memLimit) {
@@ -257,7 +252,6 @@ public class Cgroup {
         try {
             Path cgroup = createCgroup(memLimit).orElseThrow();
             ArrayList<String> cgexecCmd = new ArrayList<String>();
-            //cgexecCmd.addAll(List.of("cgexec", "-g", "*:" + cgroup.toString(), "--sticky"));
             cgexecCmd.addAll(List.of("/home/lkorinth/local/bin/cgexec2", cgroup.toString()));
             cgexecCmd.addAll(builder.command());
             ProcessBuilder cgexecPB = new ProcessBuilder(cgexecCmd);
@@ -267,22 +261,20 @@ public class Cgroup {
                     .collect(joining(" "));
             String args = cgexecPB.command().stream().map(arg -> "'" + arg.replace("'", "\\'") + "'")
                     .collect(joining(" "));
-            System.out.println("lkorinth running with limit " + memLimit + ": " + e + " " + args);
+            out.println("lkorinth running with limit " + memLimit + ": " + e + " " + args);
             long startNanos = System.nanoTime();
             int exitCode = cgexecPB.start().waitFor();
-            //System.out.println("lkorinth exit code: " + exitCode);
-            // write(of(originalCgroup).resolve(CGROUP_PROCS), SELF);
             return collectAndDelete(SYS_FS.resolve(cgroup), startNanos, exitCode, memLimit);
         } catch (Throwable t) {
-            System.out.println("lkorinth Throwable t: " + t);
+            out.println("lkorinth Throwable t: " + t);
             return Optional.empty();
         }
     }
 
     public static Stream<Interval> bisect(Interval interval, Predicate<BigDecimal> predicate) {
         return Stream.iterate(interval, i -> predicate.test(i.midPoint())
-                ? new Interval(i.low, i.midPoint())
-                : new Interval(i.midPoint(), i.high));
+                              ? new Interval(i.low, i.midPoint())
+                              : new Interval(i.midPoint(), i.high));
     }
 
     public static boolean canRunProgramWithLimit(ProcessBuilder builder, long memLimit) {
@@ -290,10 +282,8 @@ public class Cgroup {
     }
 
     public static long bisect(ProcessBuilder builder, Interval interval) {
-        //System.out.println("lkorinth: start bisect");
         long mem = bisect(interval, memLimit -> canRunProgramWithLimit(builder, memLimit.longValue()))
-                .skip(8).findFirst().get().high.longValue();
-        //        System.out.println("lkorinth: end bisect: " + mem);
+            .skip(8).findFirst().get().high.longValue();
         return mem;
     }
 
@@ -302,14 +292,13 @@ public class Cgroup {
     public static void main(String[] args) {
         ProcessBuilder builder = new ProcessBuilder("stress", "--cpu", "3", "--vm", "1", "--vm-bytes", "1G",
                 "--timeout", "1");
-        System.out.println(
+        out.println(
                 "lkorinth bisect size: " + bisect(builder, new Interval(valueOf(0), valueOf(10_000_000_000L))));
     }
 
     public static String regressionScriptId(RegressionScript script) {
         return script.getTestDescription().getRootRelativePath()
-                + "#" + script.getTestDescription().getName()
-                + "#" + script.getTestDescription().getId();
+            + "#" + script.getTestDescription().getName()
+            + "#" + script.getTestDescription().getId();
     }
-    //cgexec
 }

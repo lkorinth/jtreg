@@ -24,13 +24,16 @@
 
 package com.sun.javatest.regtest.exec;
 
+import static java.lang.System.getenv;
 import static java.lang.System.out;
 import static java.math.BigDecimal.valueOf;
 import static java.nio.file.Path.of;
+import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toConcurrentMap;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
@@ -41,7 +44,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -56,7 +61,8 @@ public class Cgroup {
     private static final String MEMORY_SWAP_MAX = "memory.swap.max";
     private static final String MEMORY_MAX = "memory.max";
     private static final String CGROUP_SUBTREE_CONTROL = "cgroup.subtree_control";
-
+    private static Path cgexecScript;
+    private static long cachedUserId = Long.parseLong(run("id", "-u").findFirst().get());
     private static final String SELF = "0";
 
     private static Stream<String> lines(Path path) {
@@ -102,7 +108,7 @@ public class Cgroup {
         }
     }
 
-    static long cachedUserId = Long.parseLong(run("id", "-u").findFirst().get());
+   
 
     public static long getUserId() {
         return cachedUserId;
@@ -139,18 +145,6 @@ public class Cgroup {
             }
         });
     }
-
-    public static Optional<Path> createCgroupTool(long bytes) {
-        return getUserRootGroup().map(group -> {
-            Path newGroup = of(group).resolve("jtreg/jtreg" + UUID.randomUUID().toString());
-            run("cgcreate", "mem:" + newGroup);
-            run("cgset",
-                    "-r", MEMORY_MAX + "=" + bytes,
-                    "-r", MEMORY_SWAP_MAX + "=" + "0");
-            return newGroup;
-        });
-    }
-
     /*
     record Interval(BigDecimal low, BigDecimal high) {
         BigDecimal midPoint() {
@@ -200,6 +194,27 @@ public class Cgroup {
                                                         Double.valueOf(strs[3]),
                                                         Long.valueOf(strs[4])));
         }
+
+        private static Map<String, ProcessData> readProcessData(Path p) {
+            return lines(p)
+                .map(ProcessData::fromString)
+                .collect(toConcurrentMap(Entry::getKey, Entry::getValue,(a, b) -> a.memUsageInBytes > b.memUsageInBytes ? a : b));
+        }
+
+        public static Map<String, ProcessData> testProcessData;
+
+        static {
+            out.println("lkorinth: begin static");
+            try {
+                testProcessData = ofNullable(getenv("LIMIT"))
+                    .map(inPath -> readProcessData(Path.of(inPath)))
+                    .orElse(new ConcurrentHashMap<>());
+                cgexecScript = createCgexec();
+            } catch (Exception e) {
+                out.println("lkorinth catch:" + e);
+            }
+            out.println("lkorinth: end static");
+        }
     }
 
     static Optional<ProcessData> collectAndDelete(Path p, long startNanos, int exitCode, long bytes) {
@@ -221,28 +236,10 @@ public class Cgroup {
         }
     }
 
-    private static Map<String, ProcessData> readTestMetadata(Path p) {
-        return lines(p)
-            .map(ProcessData::fromString)
-            .collect(toConcurrentMap(Entry::getKey, Entry::getValue,(a, b) -> a.memUsageInBytes > b.memUsageInBytes ? a : b));
-    }
-
-    public static Map<String, ProcessData> testProcessData;
-
-    static {
-        out.println("lkorinth: begin static");
-        try {
-            testProcessData = readTestMetadata(Path.of("/home/lkorinth/bisect"));
-        } catch (Exception e) {
-            out.println("lkorinth catch:" + e);
-        }
-        out.println("lkorinth: end static");
-    }
-
     public static Path modifyRunRestricted(ProcessBuilder builder, long memLimit) {
         Path cgroup = createCgroup(memLimit).orElseThrow();
         ArrayList<String> cgexecCmd = new ArrayList<String>();
-        cgexecCmd.addAll(List.of("/home/lkorinth/local/bin/cgexec2", cgroup.toString()));
+        cgexecCmd.addAll(List.of(cgexecScript.toString(), cgroup.toString()));
         cgexecCmd.addAll(builder.command());
         builder.command(cgexecCmd);
         return cgroup;
@@ -290,15 +287,26 @@ public class Cgroup {
     // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
     // systemd-run --user --scope /bin/bash  will start with cgroup with correct permissions (user@1000.service)
     public static void main(String[] args) {
-        ProcessBuilder builder = new ProcessBuilder("stress", "--cpu", "3", "--vm", "1", "--vm-bytes", "1G",
-                "--timeout", "1");
-        out.println(
-                "lkorinth bisect size: " + bisect(builder, new Interval(valueOf(0), valueOf(10_000_000_000L))));
+        ProcessBuilder builder = new ProcessBuilder("stress", "--cpu", "3", "--vm", "1", "--vm-bytes", "1G", "--timeout", "1");
+        out.println("lkorinth bisect size: " + bisect(builder, new Interval(valueOf(0), valueOf(10_000_000_000L))));
     }
 
     public static String regressionScriptId(RegressionScript script) {
         return script.getTestDescription().getRootRelativePath()
             + "#" + script.getTestDescription().getName()
             + "#" + script.getTestDescription().getId();
+    }
+
+    private static Path createCgexec() {
+        String script
+            = "#!/usr/bin/env bash\n"
+            + "set -eu\n"
+            + "echo 0 > \"/sys/fs/$1/cgroup.procs\"\n"
+            + "shift;\n"
+            + "exec \"${@}\" &> /dev/null\n";
+        Path path = of("/tmp/cgexec");
+        write(path, script);
+        new File(path.toString()).setExecutable(true);
+        return path;
     }
 }

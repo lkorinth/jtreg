@@ -268,6 +268,7 @@ public class ProcessCommand
                 pb.environment().clear();
                 pb.environment().putAll(env);
             }
+            long nanos = System.nanoTime();
             final Process process = pb.start();
             InputStream processIn = process.getInputStream();
             InputStream processErr = process.getErrorStream();
@@ -300,7 +301,7 @@ public class ProcessCommand
                 outCopier.join();
                 errCopier.join();
                 int exitCode = process.waitFor();
-                cgroup.ifPresent(cg -> Cgroup.collectAndDelete(Cgroup.SYS_FS.resolve(cg), start, exitCode, memLimit.orElse(0l)));
+                cgroup.ifPresent(cg -> Cgroup.collectAndDelete(Cgroup.SYS_FS.resolve(cg), nanos, exitCode, memLimit.orElse(0l)));
 
                 // if the timeout hasn't fired, cancel it as quickly as possible
                 alarm.cancel();

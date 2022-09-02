@@ -25,7 +25,10 @@
 
 package com.sun.javatest.regtest.exec;
 
+import static java.lang.System.getenv;
+import static java.lang.System.out;
 import static java.math.BigDecimal.valueOf;
+import static java.util.Optional.ofNullable;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -34,9 +37,11 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -383,7 +388,7 @@ public class MainAction extends Action
         return ba.build(buildOpts, buildArgs, SREASON_ASSUMED_BUILD, script);
     }
 
- 
+
   private Status runOtherJVM() throws TestRunException { // lkorinth
         // Arguments to wrapper:
         String runModuleName;
@@ -530,25 +535,25 @@ public class MainAction extends Action
                 .setTimeout(timeout, TimeUnit.SECONDS)
                 .setTimeoutHandler(timeoutHandler);
 
-            if (System.getenv("BISECT") != null) {
-                System.out.println("lkorinth doing id: " + Cgroup.regressionScriptId(script));
-                Cgroup.testProcessData.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
-                        ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
-                        bCmd.directory(cmd.getExecDir());
-                        bCmd.environment().clear();
-                        bCmd.environment().putAll(cmd.getEnvironment());
-                        System.out.println("lkorinth start bisect: ");
-                        long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
-                        System.out.println("lkorinth end bisect: " + mem);
+            ofNullable(getenv("BISECT")).ifPresent(outPath -> {
+                    out.println(new SimpleDateFormat("kk:mm:ss").format(new Date()) + ": lkorinth doing id: " + Cgroup.regressionScriptId(script));
+                    Cgroup.ProcessData.testProcessData.computeIfAbsent(Cgroup.regressionScriptId(script), s -> {
+                            ProcessBuilder bCmd = new ProcessBuilder(cmd.getCommand());
+                            bCmd.directory(cmd.getExecDir());
+                            bCmd.environment().clear();
+                            bCmd.environment().putAll(cmd.getEnvironment());
+                            out.println(new SimpleDateFormat("kk:mm:ss").format(new Date()) + ": lkorinth start bisect: ");
+                            long mem = Cgroup.bisect(bCmd, new Cgroup.Interval(valueOf(0), valueOf(10_000_000_000L)));
+                            out.println(new SimpleDateFormat("kk:mm:ss").format(new Date()) + ": lkorinth end bisect: " + mem);
 
-                        Optional<Cgroup.ProcessData> opd = Cgroup.runRestricted(bCmd, mem*2);
-                        opd.ifPresent(pd -> Cgroup.write(Path.of("/home/lkorinth/bisect"),
-                                                         s + " " + pd.toString() + "\n",
-                                                         StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE));
-                        return opd.get();
+                            Optional<Cgroup.ProcessData> opd = Cgroup.runRestricted(bCmd, mem*2);
+                            opd.ifPresent(pd -> Cgroup.write(Path.of(outPath),
+                                                             s + " " + pd.toString() + "\n",
+                                                             StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.WRITE));
+                            return opd.get();
+                        });
                 });
-            }
-            status = normalize(cmd.exec(Optional.of(Cgroup.testProcessData.get(Cgroup.regressionScriptId(script)).memUsageInBytes))); // lkorinth
+            status = normalize(cmd.exec(Optional.of(Cgroup.ProcessData.testProcessData.get(Cgroup.regressionScriptId(script)).memUsageInBytes))); // lkorinth
         } finally {
             sysOut.close();
             sysErr.close();

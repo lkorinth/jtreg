@@ -261,7 +261,7 @@ public class ProcessCommand
         }
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            Optional<Path> cgroup = memLimit.map(l -> Cgroup.modifyRunRestricted(pb, l));
+            Optional<Path> cgroup = memLimit.map(l -> Cgroup.modifyRunRestricted(pb, l * 2));
 
             pb.directory(execDir);
             if (env != null) {

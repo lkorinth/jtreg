@@ -553,7 +553,7 @@ public class MainAction extends Action
                             return opd.get();
                         });
                 });
-            status = normalize(cmd.exec(Optional.of(Cgroup.ProcessData.testProcessData.get(Cgroup.regressionScriptId(script)).memUsageInBytes))); // lkorinth
+            status = normalize(cmd.exec(Optional.ofNullable(Cgroup.ProcessData.testProcessData.get(Cgroup.regressionScriptId(script))).map(t -> t.memUsageInBytes * 1))); // lkorinth
         } finally {
             sysOut.close();
             sysErr.close();

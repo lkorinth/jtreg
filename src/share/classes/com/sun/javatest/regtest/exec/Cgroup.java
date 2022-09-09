@@ -190,9 +190,9 @@ public class Cgroup {
         public static Entry<String, ProcessData> fromString(String str) {
             String[] strs = str.split(" ");
             return Map.entry(strs[0], new ProcessData(Integer.valueOf(strs[1]),
-                                                        Double.valueOf(strs[2]),
-                                                        Double.valueOf(strs[3]),
-                                                        Long.valueOf(strs[4])));
+                                                      Double.valueOf(strs[2]),
+                                                      Double.valueOf(strs[3]),
+                                                      Long.valueOf(strs[4])));
         }
 
         private static Map<String, ProcessData> readProcessData(Path p) {
@@ -219,16 +219,16 @@ public class Cgroup {
 
     static Optional<ProcessData> collectAndDelete(Path p, long startNanos, int exitCode, long bytes) {
         try {
-            out.println("lkorinth delete path: " + p);
+            //out.println("lkorinth delete path: " + p);
             double seconds = lines(p.resolve(CPU_STAT))
                     .map(s -> s.split(" "))
                     .filter(a -> a[0].equals(USAGE_USEC))
                     .map(a -> Long.valueOf(a[1]))
                     .findFirst().orElse(Long.valueOf(0)) / 1_000_000.0;
             double wall = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-            out.println("lkorinth usage in seconds: " + seconds);
-            out.println("lkorinth wall in seconds: " + wall);
-            out.println("lkorinth load: " + seconds / wall);
+            //out.println("lkorinth usage in seconds: " + seconds);
+            //out.println("lkorinth wall in seconds: " + wall);
+            //out.println("lkorinth load: " + seconds / wall);
             Files.delete(p);
             return Optional.of(new ProcessData(exitCode, seconds, wall, bytes));
         } catch (Exception e) {
@@ -249,16 +249,18 @@ public class Cgroup {
         try {
             Path cgroup = createCgroup(memLimit).orElseThrow();
             ArrayList<String> cgexecCmd = new ArrayList<String>();
-            cgexecCmd.addAll(List.of("/home/lkorinth/local/bin/cgexec2", cgroup.toString()));
+            cgexecCmd.addAll(List.of(cgexecScript.toString(), cgroup.toString()));
             cgexecCmd.addAll(builder.command());
             ProcessBuilder cgexecPB = new ProcessBuilder(cgexecCmd);
+            cgexecPB.redirectError(ProcessBuilder.Redirect.DISCARD);
+            cgexecPB.redirectOutput(ProcessBuilder.Redirect.DISCARD);
             cgexecPB.environment().clear();
             cgexecPB.environment().putAll(builder.environment());
-            String e = cgexecPB.environment().entrySet().stream().map(pair -> pair.getKey() + "=" + pair.getValue())
-                    .collect(joining(" "));
-            String args = cgexecPB.command().stream().map(arg -> "'" + arg.replace("'", "\\'") + "'")
-                    .collect(joining(" "));
-            out.println("lkorinth running with limit " + memLimit + ": " + e + " " + args);
+            //String e = cgexecPB.environment().entrySet().stream().map(pair -> pair.getKey() + "=" + pair.getValue())
+            //        .collect(joining(" "));
+            //String args = cgexecPB.command().stream().map(arg -> "'" + arg.replace("'", "\\'") + "'")
+            //        .collect(joining(" "));
+            //out.println("lkorinth running with limit " + memLimit + ": " + e + " " + args);
             long startNanos = System.nanoTime();
             int exitCode = cgexecPB.start().waitFor();
             return collectAndDelete(SYS_FS.resolve(cgroup), startNanos, exitCode, memLimit);
@@ -303,7 +305,7 @@ public class Cgroup {
             + "set -eu\n"
             + "echo 0 > \"/sys/fs/$1/cgroup.procs\"\n"
             + "shift;\n"
-            + "exec \"${@}\" &> /dev/null\n";
+            + "exec \"${@}\"\n"; // &> /dev/null\n";
         Path path = of("/tmp/cgexec");
         write(path, script);
         new File(path.toString()).setExecutable(true);
